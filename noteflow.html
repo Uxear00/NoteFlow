@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Note Flow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: {
+        fontFamily: {
+          sans: ['Plus Jakarta Sans','sans-serif'],
+          handwriting: ['Caveat','cursive']
+        }
+      }}
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; overflow: hidden; }
+    button, input, textarea { font: inherit; }
+    textarea { field-sizing: content; }
+    .board-bg {
+      background-size: 24px 24px;
+      background-image: radial-gradient(circle,#cbd5e1 1.35px,transparent 1.35px);
+    }
+    .dark .board-bg {
+      background-image: radial-gradient(circle,#475569 1.35px,transparent 1.35px);
+    }
+    .tool-active {
+      background:#6c5ce7!important; color:#fff!important;
+      box-shadow:0 6px 16px rgba(108,92,231,.32);
+    }
+    .cursor-select { cursor: default; }
+    .cursor-pan { cursor: grab; }
+    .cursor-pan.grabbing { cursor: grabbing; }
+    .cursor-pen { cursor: crosshair; }
+    .cursor-stamp { cursor: copy; }
+    .board-element { position:absolute; user-select:none; transform-origin:center; }
+    .board-element.selected { outline:2px solid #6c5ce7; outline-offset:4px; }
+    .connector-dot {
+      position:absolute; width:12px; height:12px; border-radius:999px;
+      background:#fff; border:2px solid #6c5ce7; z-index:5;
+      box-shadow:0 2px 8px rgba(15,23,42,.18); cursor:crosshair;
+    }
+    .connector-dot:hover { background:#6c5ce7; transform:scale(1.35); }
+    .dot-top { top:-6px; left:50%; transform:translateX(-50%); }
+    .dot-bottom { bottom:-6px; left:50%; transform:translateX(-50%); }
+    .dot-left { left:-6px; top:50%; transform:translateY(-50%); }
+    .dot-right { right:-6px; top:50%; transform:translateY(-50%); }
+    .resize-handle {
+      position:absolute; right:-8px; bottom:-8px; width:16px; height:16px; border-radius:5px;
+      background:#6c5ce7; border:2px solid white; cursor:nwse-resize; z-index:25;
+      box-shadow:0 2px 8px rgba(15,23,42,.18);
+    }
+    .resize-handle::after{content:'';position:absolute;right:2px;bottom:2px;width:6px;height:6px;border-right:2px solid rgba(255,255,255,.92);border-bottom:2px solid rgba(255,255,255,.92);border-radius:1px}
+    .resize-handle:hover{transform:scale(1.15)}
+    .sticky-resizable{min-width:120px!important;min-height:90px!important;max-width:560px!important;max-height:480px!important;box-sizing:border-box;overflow:hidden!important}.sticky-editor{min-width:0;min-height:0;overflow:auto!important;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap;box-sizing:border-box;padding-right:4px}
+    .present-exit{display:none;position:fixed;top:18px;right:18px;z-index:500;padding:10px 14px;border-radius:12px;background:rgba(15,23,42,.88);color:#fff;font-size:12px;font-weight:800;box-shadow:0 10px 24px rgba(0,0,0,.22);backdrop-filter:blur(10px)}
+    .present-exit:hover{background:rgba(15,23,42,.98)}
+    .present-mode .present-exit{display:flex;align-items:center;gap:8px}
+    #selection-box { position:absolute; border:1px dashed #6c5ce7; background:rgba(108,92,231,.08); pointer-events:none; z-index:35; }
+    .live-cursor { pointer-events:none; position:absolute; top:0; left:0; z-index:60; transition:transform .08s ease-out; }
+    .toast { animation: toastIn .18s ease-out; }
+    @keyframes toastIn { from {opacity:0; transform:translateY(8px)} to {opacity:1; transform:translateY(0)} }
+    @keyframes pop { from {opacity:0; transform:scale(.6) rotate(-8deg)} to {opacity:1; transform:scale(1) rotate(0)} }
+    .stamp-pop { animation:pop .18s cubic-bezier(.175,.885,.32,1.275); }
+    .no-select { user-select:none; -webkit-user-select:none; }
+  
+    .professional-panel { background:rgba(255,255,255,.92); backdrop-filter:blur(18px); border:1px solid rgba(148,163,184,.22); box-shadow:0 18px 45px rgba(15,23,42,.12); }
+    .dark .professional-panel { background:rgba(15,23,42,.92); border-color:rgba(71,85,105,.55); }
+    .panel-item { transition:background .15s, transform .15s; }
+    .panel-item:hover { background:rgba(99,102,241,.08); }
+    .panel-item.active { background:rgba(99,102,241,.12); }
+    .frame-element { border:2px solid #94a3b8; background:rgba(255,255,255,.28); border-radius:18px; }
+    .dark .frame-element { border-color:#64748b; background:rgba(15,23,42,.22); }
+    .frame-title { position:absolute; left:12px; top:-34px; font-size:13px; font-weight:800; letter-spacing:.01em; padding:5px 10px; border-radius:9px; background:rgba(255,255,255,.92); border:1px solid rgba(148,163,184,.25); box-shadow:0 6px 16px rgba(15,23,42,.08); }
+    .dark .frame-title { background:rgba(15,23,42,.92); }
+    .present-mode header, .present-mode .professional-ui, .present-mode #property-bar, .present-mode #selection-actions, .present-mode #zoom-controls, .present-mode #toast { display:none!important; }
+    .present-mode #viewport { padding-top:0!important; }
+
+    .fj-tooltip{position:fixed;z-index:9999;pointer-events:none;opacity:0;transform:translateY(4px) scale(.98);transition:opacity .12s ease,transform .12s ease;min-width:150px;max-width:280px;padding:9px 11px;border-radius:10px;background:rgba(15,23,42,.96);color:#fff;box-shadow:0 12px 30px rgba(15,23,42,.22);font-size:11px;font-weight:700}
+    .dark .fj-tooltip{background:rgba(2,6,23,.97)} .fj-tooltip.show{opacity:1;transform:none}
+    .fj-tooltip .tt-row{display:flex;align-items:center;justify-content:space-between;gap:14px}.fj-tooltip .tt-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fj-tooltip .tt-key{display:flex;gap:3px;flex:0 0 auto}.fj-tooltip kbd{min-width:20px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.1);font:700 10px/1 'Plus Jakarta Sans',sans-serif}
+    .shortcut-modal{animation:fjModalIn .16s ease-out}@keyframes fjModalIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+    .shortcut-row{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;padding:10px 12px;border-radius:10px}.shortcut-row:hover{background:rgba(99,102,241,.07)}
+    .shortcut-keys{display:flex;gap:4px;align-items:center;justify-content:flex-end}.shortcut-keys kbd{min-width:25px;height:24px;padding:0 7px;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;font-size:10px;font-weight:800;box-shadow:0 1px 0 #cbd5e1}.dark .shortcut-keys kbd{border-color:#475569;background:#1e293b;color:#e2e8f0;box-shadow:0 1px 0 #475569}
+</style>
+</head>
+<body class="h-full bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100">
+  <header class="h-14 absolute inset-x-0 top-0 z-50 flex items-center justify-between gap-3 px-4 border-b border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl">
+    <div class="flex items-center min-w-0 gap-3">
+      <div class="w-9 h-9 shrink-0 rounded-xl bg-indigo-600 text-white grid place-items-center shadow-lg shadow-indigo-500/20">NF</div>
+      <div class="flex items-center gap-2 min-w-0">
+        <span>Note Flow</span><input id="board-title" value=""
+          class="w-44 sm:w-60 bg-transparent px-2 py-1 rounded-lg font-extrabold text-sm hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <span class="hidden sm:inline px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] font-extrabold uppercase tracking-wide">free</span>
+      </div>
+    </div>
+
+    <div class="hidden md:flex items-center gap-1 rounded-xl p-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+      <button id="undo-btn" class="p-2 rounded-lg hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30" title="Undo (Ctrl/Cmd+Z)"><i class="fa-solid fa-rotate-left"></i></button>
+      <button id="redo-btn" class="p-2 rounded-lg hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30" title="Redo (Ctrl/Cmd+Y or Shift+Z)"><i class="fa-solid fa-rotate-right"></i></button>
+      <div class="w-px h-5 bg-slate-300 dark:bg-slate-700 mx-1"></div>
+      <button id="clear-btn" class="px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"><i class="fa-solid fa-trash-can mr-1"></i>Clear</button>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button id="collab-btn" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-1.5"></span><span class="hidden sm:inline">error</span> ..
+      </button>
+      <button id="shortcuts-btn" class="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700" title="Keyboard shortcuts (?)"><i class="fa-solid fa-keyboard"></i></button>
+      <button id="theme-btn" class="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700" title="Toggle theme">
+        <i class="fa-solid fa-moon dark:hidden"></i><i class="fa-solid fa-sun hidden dark:block text-amber-400"></i>
+      </button>
+      <div class="relative">
+        <button id="export-btn" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold shadow-sm flex items-center gap-1.5">
+          <i class="fa-solid fa-download"></i><span>Export</span><i class="fa-solid fa-chevron-down text-[9px]"></i>
+        </button>
+        <div id="export-menu" class="hidden absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xl p-1.5 text-sm">
+          <button id="png-btn" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"><i class="fa-regular fa-file-image text-indigo-500"></i> Export board as PNG</button>
+          <button id="json-btn" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"><i class="fa-solid fa-file-code text-emerald-500"></i> Save workspace JSON</button>
+          <label class="w-full px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"><i class="fa-solid fa-file-import text-amber-500"></i> Open workspace JSON<input id="import-file" type="file" accept=".json,application/json" class="hidden"></label>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="viewport" class="absolute inset-0 pt-14 overflow-hidden board-bg cursor-select">
+    <button id="present-exit" class="present-exit" title="Exit presentation (Esc)"><i class="fa-solid fa-arrow-left"></i><span>Exit presentation</span><kbd style="padding:3px 6px;border-radius:6px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16)">Esc</kbd></button>
+    <div id="canvas-container" class="absolute left-0 top-0 w-full h-full origin-top-left">
+      <canvas id="paint-canvas" class="absolute inset-0 w-full h-full"></canvas>
+      <svg id="connectors-svg" class="absolute inset-0 w-full h-full overflow-visible pointer-events-none z-10">
+        <defs>
+          <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor"></path>
+          </marker>
+        </defs>
+      </svg>
+      <div id="elements-layer" class="absolute inset-0 z-20 pointer-events-none"></div>
+      <div id="selection-box" class="hidden"></div>
+      <div id="cursors-layer" class="absolute inset-0 z-50 pointer-events-none"></div>
+    </div>
+
+    <div id="property-bar" class="absolute top-[68px] left-1/2 -translate-x-1/2 z-40 max-w-[calc(100%-24px)]">
+      <div id="property-controls" class="rounded-2xl bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700 shadow-xl px-4 py-2 flex items-center gap-3 text-xs"></div>
+    </div>
+
+    <div class="absolute left-1/2 -translate-x-1/2 bottom-5 z-40">
+      <div class="rounded-2xl bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-700 shadow-2xl p-1.5 flex items-center gap-1 no-select">
+        <button data-tool="select" title="Select (V)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 tool-active"><i class="fa-solid fa-arrow-pointer text-lg"></i></button>
+        <button data-tool="pan" title="Pan (H / Space)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700"><i class="fa-solid fa-hand text-lg"></i></button>
+        <div class="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1"></div>
+        <button data-tool="sticky" title="Sticky Note (S)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-amber-500"><i class="fa-solid fa-note-sticky text-lg"></i></button>
+        <button data-tool="pen" title="Pen (P)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-500"><i class="fa-solid fa-pen-nib text-lg"></i></button>
+        <button data-tool="shape" title="Shape (R)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-emerald-500"><i class="fa-solid fa-shapes text-lg"></i></button>
+        <button data-tool="text" title="Text (T)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-purple-500"><i class="fa-solid fa-font text-lg"></i></button>
+        <button data-tool="stamp" title="Stamp (E)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-rose-500"><i class="fa-solid fa-face-smile text-lg"></i></button>
+        <button data-tool="frame" title="Frame (F)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-cyan-500"><i class="fa-regular fa-window-maximize text-lg"></i></button>
+        <button data-tool="eraser" title="Eraser (X)" class="tool-btn w-11 h-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"><i class="fa-solid fa-eraser text-lg"></i></button>
+      </div>
+    </div>
+
+    <div class="absolute right-5 bottom-5 z-40">
+      <div class="rounded-xl bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700 shadow-xl p-1.5 flex items-center gap-1 text-xs font-bold">
+        <button id="zoom-out" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i class="fa-solid fa-minus"></i></button>
+        <button id="zoom-reset" class="px-2 w-14 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">100%</button>
+        <button id="zoom-in" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i class="fa-solid fa-plus"></i></button>
+      </div>
+    </div>
+
+    <div id="selection-actions" class="professional-ui absolute top-[68px] right-5 z-40 hidden">
+      <div class="professional-panel rounded-2xl px-2 py-2 flex items-center gap-1 text-xs">
+        <button data-action="duplicate" class="px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 font-bold" title="Duplicate (Ctrl/Cmd+D)"><i class="fa-regular fa-copy"></i></button>
+        <button data-action="lock" class="px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 font-bold" title="Lock / unlock"><i class="fa-solid fa-lock"></i></button>
+        <div class="w-px h-5 bg-slate-200 dark:bg-slate-700"></div>
+        <button data-action="front" class="px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 font-bold" title="Bring to front"><i class="fa-solid fa-arrow-up"></i></button>
+        <button data-action="back" class="px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 font-bold" title="Send to back"><i class="fa-solid fa-arrow-down"></i></button>
+      </div>
+    </div>
+    <aside id="layers-panel" class="professional-ui absolute top-20 right-5 z-30 hidden w-64 max-h-[58vh] overflow-hidden rounded-2xl professional-panel">
+      <div class="px-4 py-3 border-b border-slate-200/70 dark:border-slate-700 flex items-center justify-between"><div><div class="text-xs uppercase tracking-wider font-extrabold text-slate-400">Board</div><div class="font-extrabold text-sm">Layers</div></div><button id="layers-close" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i class="fa-solid fa-xmark"></i></button></div>
+      <div id="layers-list" class="max-h-[calc(58vh-58px)] overflow-auto p-2"></div>
+    </aside>
+    <div id="quick-panel" class="professional-ui absolute left-5 top-20 z-30"><div class="professional-panel rounded-2xl p-1.5 flex items-center gap-1">
+      <button id="layers-toggle" class="w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" title="Layers"><i class="fa-solid fa-layer-group"></i></button>
+      <button id="grid-toggle" class="w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600" title="Toggle grid"><i class="fa-solid fa-border-all"></i></button>
+      <button id="snap-toggle" class="w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-emerald-600" title="Snap to grid"><i class="fa-solid fa-magnet"></i></button>
+      <button id="fit-btn" class="w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" title="Fit board"><i class="fa-solid fa-expand"></i></button>
+      <button id="present-btn" class="w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" title="Presentation mode"><i class="fa-solid fa-person-chalkboard"></i></button>
+    </div></div>
+    <div id="status-bar" class="professional-ui absolute left-5 bottom-5 z-30"><div class="professional-panel rounded-xl px-3 py-2 flex items-center gap-3 text-[10px] font-bold text-slate-500">
+      <span id="objects-count">0 objects</span><span class="w-1 h-1 rounded-full bg-slate-300"></span><span id="selected-count">0 selected</span><span class="w-1 h-1 rounded-full bg-slate-300"></span><span id="snap-status">Snap off</span>
+    </div></div>
+
+    <div id="toast" class="hidden absolute left-1/2 -translate-x-1/2 top-20 z-[100] rounded-xl bg-slate-900 text-white text-xs font-bold px-4 py-2 shadow-xl toast"></div>
+  
+    <div id="shortcut-overlay" class="hidden fixed inset-0 z-[200] bg-slate-950/35 backdrop-blur-[2px] items-center justify-center p-4">
+      <div class="shortcut-modal w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800"><div><div class="text-[10px] uppercase tracking-[.18em] text-slate-400 font-extrabold">NoteFlow</div><div class="text-lg font-extrabold">Keyboard shortcuts</div></div><button id="shortcuts-close" class="w-9 h-9 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="p-4 overflow-auto max-h-[calc(80vh-74px)]"><div id="shortcut-list" class="space-y-1"></div></div>
+      </div>
+    </div>
+  </main>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const viewport = $('#viewport');
+  const container = $('#canvas-container');
+  const canvas = $('#paint-canvas');
+  const ctx = canvas.getContext('2d');
+  const svg = $('#connectors-svg');
+  const elementsLayer = $('#elements-layer');
+  const selectionBox = $('#selection-box');
+  const cursorsLayer = $('#cursors-layer');
+  const propertyControls = $('#property-controls');
+  const titleInput = $('#board-title');
+  const toast = $('#toast');
+
+  const COLORS = ['#6c5ce7','#ef4444','#10b981','#f59e0b','#3b82f6','#ec4899','#0f172a'];
+  const STICKIES = [
+    {bg:'#fff3bf', border:'#ffe066'},
+    {bg:'#d0ebff', border:'#a5d8ff'},
+    {bg:'#ffd6e7', border:'#fcc2d7'},
+    {bg:'#d3f9d8', border:'#b2f2bb'},
+    {bg:'#e9e4ff', border:'#c4b5fd'},
+    {bg:'#ffe8cc', border:'#ffd8a8'}
+  ];
+  const STAMPS = ['❤️','👍','⭐','🔥','😄','🚀','💡','❓'];
+  const state = {
+    tool:'select', zoom:1, pan:{x:0,y:0},
+    elements:[], connectors:[], selected:[],
+    penColor:COLORS[0], penWidth:4, stickyColor:STICKIES[0].bg,
+    shape:'rectangle', stamp:'❤️',
+    pointer:null, drawing:null, marquee:null, resize:null,
+    spaceDown:false, simCollab:false,
+    history:[], historyIndex:-1, grid:true, snap:false
+  };
+
+
+  const SHORTCUTS=[
+    ['Select',['V']],['Pan',['H']],['Pan temporarily',['Space']],['Sticky note',['S']],['Pen',['P']],['Shape',['R']],['Text',['T']],['Stamp / reaction',['E']],['Frame',['F']],['Eraser',['X']],
+    ['Undo',['Ctrl','Z']],['Redo',['Ctrl','Y']],['Redo alternative',['Ctrl','Shift','Z']],['Duplicate selected',['Ctrl','D']],['Delete selected',['Delete']],
+    ['Nudge selected',['←','↑','↓','→']],['Large nudge',['Shift','Arrow']],['Fit board',['Shift','1']],['Zoom in',['+']],['Zoom out',['-']],['Open shortcuts',['?']],['Close dialog',['Esc']]
+  ];
+  const keyDisplay=k=>({Ctrl:'Ctrl',Cmd:'⌘',Shift:'⇧',Alt:'Alt',Space:'Space',Delete:'Del',Esc:'Esc'})[k]||k;
+  function renderShortcutList(){const h=$('#shortcut-list');if(!h)return;h.innerHTML=SHORTCUTS.map(([n,ks])=>`<div class="shortcut-row"><div class="text-sm font-bold text-slate-700 dark:text-slate-200">${n}</div><div class="shortcut-keys">${ks.map(k=>`<kbd>${keyDisplay(k)}</kbd>`).join('<span class="text-[10px] text-slate-400">+</span>')}</div></div>`).join('');}
+  function openShortcuts(){renderShortcutList();const o=$('#shortcut-overlay');o.classList.remove('hidden');o.classList.add('flex');}
+  function closeShortcuts(){const o=$('#shortcut-overlay');o.classList.add('hidden');o.classList.remove('flex');}
+  function initFigJamTooltips(){
+    const tip=document.createElement('div');tip.id='fj-tooltip';tip.className='fj-tooltip';document.body.appendChild(tip);let timer;
+    const parse=raw=>{const m=(raw||'').trim().match(/^(.*?)(?:\s*\((.*?)\))?$/);return {label:(m?.[1]||raw).trim(),shortcut:(m?.[2]||'').trim()};};
+    const place=el=>{const r=el.getBoundingClientRect(),t=tip.getBoundingClientRect();let left=r.left+r.width/2-t.width/2,top=r.bottom+8;if(top+t.height>innerHeight-8)top=r.top-t.height-8;left=Math.max(8,Math.min(innerWidth-t.width-8,left));tip.style.left=left+'px';tip.style.top=top+'px';};
+    document.querySelectorAll('button,[role="button"]').forEach(el=>{const raw=el.getAttribute('title')||el.getAttribute('data-tooltip');if(!raw)return;el.setAttribute('data-original-title',raw);el.removeAttribute('title');const {label,shortcut}=parse(raw);el.addEventListener('mouseenter',()=>{clearTimeout(timer);tip.innerHTML=`<div class="tt-row"><span class="tt-label">${label}</span>${shortcut?`<span class="tt-key">${shortcut.split(/\s*\+\s*/).map(k=>`<kbd>${keyDisplay(k)}</kbd>`).join('')}</span>`:''}</div>`;timer=setTimeout(()=>{place(el);tip.classList.add('show')},250)});el.addEventListener('mouseleave',()=>{clearTimeout(timer);tip.classList.remove('show')});});
+  }
+
+  function uuid(prefix){ return prefix+'-'+crypto.randomUUID().slice(0,8); }
+  function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+  function clamp(n,a,b){ return Math.max(a,Math.min(b,n)); }
+
+  function toastMsg(msg){
+    toast.textContent=msg; toast.classList.remove('hidden');
+    clearTimeout(toast._t); toast._t=setTimeout(()=>toast.classList.add('hidden'),1500);
+  }
+
+  function setTool(tool){
+    state.tool=tool;
+    document.querySelectorAll('.tool-btn').forEach(b=>b.classList.toggle('tool-active',b.dataset.tool===tool));
+    viewport.classList.remove('cursor-pan','cursor-pen','cursor-stamp','grabbing');
+    if(tool==='pan') viewport.classList.add('cursor-pan');
+    if(tool==='pen') viewport.classList.add('cursor-pen');
+    if(tool==='stamp') viewport.classList.add('cursor-stamp');
+    renderPropertyBar();
+  }
+
+  function resizeCanvas(){
+    const r=viewport.getBoundingClientRect(), d=window.devicePixelRatio||1;
+    canvas.width=Math.max(1,Math.floor(r.width*d));
+    canvas.height=Math.max(1,Math.floor(r.height*d));
+    canvas.style.width=r.width+'px'; canvas.style.height=r.height+'px';
+    ctx.setTransform(d,0,0,d,0,0);
+    redraw();
+  }
+  window.addEventListener('resize',resizeCanvas);
+
+  function applyTransform(){
+    container.style.transform=`translate(${state.pan.x}px,${state.pan.y}px) scale(${state.zoom})`;
+    $('#zoom-reset').textContent=Math.round(state.zoom*100)+'%';
+    renderConnectors();
+  }
+  function screenToWorld(clientX,clientY){
+    const r=viewport.getBoundingClientRect();
+    return {x:(clientX-r.left-state.pan.x)/state.zoom,y:(clientY-r.top-state.pan.y)/state.zoom};
+  }
+
+  function snapshot(){
+    return JSON.stringify({elements:state.elements,connectors:state.connectors,title:titleInput.value});
+  }
+  function pushHistory(){
+    const snap=snapshot();
+    if(state.history[state.historyIndex]===snap) return;
+    state.history=state.history.slice(0,state.historyIndex+1);
+    state.history.push(snap);
+    if(state.history.length>80) state.history.shift();
+    state.historyIndex=state.history.length-1;
+    updateHistoryButtons();
+  }
+  function restore(snap){
+    const data=JSON.parse(snap);
+    state.elements=data.elements||[];
+    state.connectors=data.connectors||[];
+    titleInput.value=data.title||'NoteFlow Workspace';
+    state.selected=[];
+    renderAll();
+  }
+  function undo(){
+    if(state.historyIndex<=0) return;
+    state.historyIndex--; restore(state.history[state.historyIndex]); updateHistoryButtons();
+  }
+  function redo(){
+    if(state.historyIndex>=state.history.length-1) return;
+    state.historyIndex++; restore(state.history[state.historyIndex]); updateHistoryButtons();
+  }
+  function updateHistoryButtons(){
+    $('#undo-btn').disabled=state.historyIndex<=0;
+    $('#redo-btn').disabled=state.historyIndex>=state.history.length-1;
+  }
+
+  function bounds(el){
+    if(el.type==='path' && el.points?.length){
+      const xs=el.points.map(p=>p.x), ys=el.points.map(p=>p.y);
+      const x=Math.min(...xs), y=Math.min(...ys);
+      return {x,y,width:Math.max(1,Math.max(...xs)-x),height:Math.max(1,Math.max(...ys)-y)};
+    }
+    return {x:el.x,y:el.y,width:el.width||20,height:el.height||20};
+  }
+  function hitTest(x,y){
+    for(let i=state.elements.length-1;i>=0;i--){
+      const el=state.elements[i], b=bounds(el);
+      if(x>=b.x&&x<=b.x+b.width&&y>=b.y&&y<=b.y+b.height) return el;
+    }
+    return null;
+  }
+  function sideAnchor(el,side){
+    const b=bounds(el);
+    if(side==='top') return {x:b.x+b.width/2,y:b.y};
+    if(side==='bottom') return {x:b.x+b.width/2,y:b.y+b.height};
+    if(side==='left') return {x:b.x,y:b.y+b.height/2};
+    return {x:b.x+b.width,y:b.y+b.height/2};
+  }
+  function pointInsideBounds(el,x1,y1,x2,y2){
+    const b=bounds(el);
+    return b.x>=x1&&b.y>=y1&&b.x+b.width<=x2&&b.y+b.height<=y2;
+  }
+
+  function createElement(type,x,y){
+    let e={id:uuid('el'),type,x,y,width:170,height:150};
+    if(type==='sticky'){ e.color=state.stickyColor; e.text='Double-click to edit note…'; }
+    if(type==='shape'){ e.shapeType=state.shape; e.text='Process Step'; e.width=150; e.height=90; }
+    if(type==='text'){ e.text='Double-click to edit text'; e.width=220; e.height=56; }
+    if(type==='stamp'){ e.symbol=state.stamp; e.width=54; e.height=54; }
+    if(type==='frame'){ e.title='Frame'; e.width=420; e.height=270; }
+    state.elements.push(e); state.selected=[e.id]; pushHistory(); renderAll(); 
+    if(type==='text'||type==='sticky') setTimeout(()=>focusEditor(e.id),0);
+  }
+  function focusEditor(id){
+    const el=elementsLayer.querySelector(`[data-id="${id}"] textarea, [data-id="${id}"] input`);
+    if(el){ el.focus(); el.select?.(); }
+  }
+
+  function deleteSelected(){
+    if(!state.selected.length) return;
+    const ids=new Set(state.selected);
+    state.elements=state.elements.filter(e=>!ids.has(e.id));
+    state.connectors=state.connectors.filter(c=>!ids.has(c.fromId)&&!ids.has(c.toId));
+    state.selected=[]; pushHistory(); renderAll();
+  }
+  function clearBoard(){
+    if(!state.elements.length) return;
+    if(confirm('Clear the whole whiteboard?')){ state.elements=[]; state.connectors=[]; state.selected=[]; pushHistory(); renderAll(); }
+  }
+
+  function moveSelected(dx,dy){
+    const ids=new Set(state.selected);
+    state.elements.forEach(e=>{
+      if(!ids.has(e.id)) return;
+      if(e.type==='path'){ e.points.forEach(p=>{p.x+=dx;p.y+=dy;}); e.x+=dx; e.y+=dy; }
+      else { e.x+=dx; e.y+=dy; }
+    });
+  }
+
+  function renderAll(){ renderElements(); renderConnectors(); redraw(); }
+  function renderElements(){
+    elementsLayer.innerHTML='';
+    for(const el of [...state.elements].sort((a,b)=>(a.type==='frame'?0:1)-(b.type==='frame'?0:1))){
+      if(el.type==='path') continue;
+      const div=document.createElement('div');
+      div.dataset.id=el.id; div.className='board-element pointer-events-auto no-select';
+      div.style.left=el.x+'px'; div.style.top=el.y+'px'; div.style.width=el.width+'px'; div.style.height=el.height+'px';
+      if(state.selected.includes(el.id)) div.classList.add('selected');
+
+      if(el.type==='frame'){
+        div.classList.add('frame-element');
+        div.style.zIndex='1';
+        div.innerHTML='<div class="frame-title"><i class="fa-regular fa-window-maximize mr-1"></i><span class="frame-label"></span></div>';
+        div.querySelector('.frame-label').textContent=el.title||'Frame';
+        div.querySelector('.frame-title').addEventListener('pointerdown',ev=>ev.stopPropagation());
+      } else if(el.type==='sticky'){
+        div.classList.add('rounded-2xl','shadow-xl','border','p-3.5','flex','flex-col','sticky-resizable');
+        div.style.background=el.color; div.style.borderColor='rgba(0,0,0,.08)';
+        div.innerHTML=`
+          <textarea class="sticky-editor flex-1 w-full bg-transparent resize-none outline-none border-0 font-handwriting text-[25px] leading-snug text-slate-800" spellcheck="false"></textarea>
+          <div class="flex justify-between items-center mt-1 text-[10px] font-bold text-slate-600/80">
+            <span>Sticky</span><button class="delete px-1.5 py-1 rounded hover:text-rose-600" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
+          </div>`;
+        div.querySelector('textarea').value=el.text||'';
+        bindTextEditor(div.querySelector('textarea'),el);
+      } else if(el.type==='shape'){
+        div.classList.add('grid','place-items-center','border-2');
+        if(el.shapeType==='rectangle'){
+          div.classList.add('rounded-2xl'); div.style.borderColor='#6366f1'; div.style.background='rgba(99,102,241,.10)';
+        } else if(el.shapeType==='ellipse'){
+          div.classList.add('rounded-full'); div.style.borderColor='#10b981'; div.style.background='rgba(16,185,129,.10)';
+        } else {
+          div.classList.add('border-purple-500'); div.style.background='rgba(168,85,247,.10)'; div.style.transform='rotate(45deg)';
+        }
+        const inner=document.createElement('input'); inner.value=el.text||''; inner.className='shape-editor w-full bg-transparent text-center outline-none border-0 font-bold text-sm';
+        if(el.shapeType==='diamond') inner.style.transform='rotate(-45deg)';
+        div.appendChild(inner); bindTextEditor(inner,el);
+      } else if(el.type==='text'){
+        div.classList.add('rounded-lg','p-2');
+        const ta=document.createElement('textarea'); ta.className='w-full h-full bg-transparent resize-none outline-none border-0 font-extrabold text-base';
+        ta.value=el.text||''; div.appendChild(ta); bindTextEditor(ta,el);
+      } else if(el.type==='stamp'){
+        div.classList.add('grid','place-items-center','text-4xl','stamp-pop');
+        div.textContent=el.symbol;
+      }
+
+      if(state.selected.includes(el.id)){
+        for(const side of ['top','bottom','left','right']){
+          const dot=document.createElement('div'); dot.className='connector-dot dot-'+side; dot.title='Drag to connect';
+          dot.addEventListener('pointerdown',e=>beginConnector(e,el.id,side));
+          div.appendChild(dot);
+        }
+        const rh=document.createElement('div'); rh.className='resize-handle'; rh.title='Resize'; rh.addEventListener('pointerdown',e=>beginResize(e,el.id));
+        if(el.type!=='stamp' && !el.locked) div.appendChild(rh);
+      }
+      div.addEventListener('pointerdown',e=>onElementPointerDown(e,el.id));
+      div.addEventListener('dblclick',()=>{ if(el.type==='sticky'||el.type==='text'||el.type==='shape') focusEditor(el.id); else if(el.type==='frame'){ const next=prompt('Frame name',el.title||'Frame'); if(next!==null){el.title=next.trim()||'Frame';pushHistory();renderAll();} }});
+      div.querySelector('.delete')?.addEventListener('click',e=>{e.stopPropagation();state.selected=[el.id];deleteSelected();});
+      elementsLayer.appendChild(div);
+    }
+  }
+
+  function bindTextEditor(editor,el){
+    editor.addEventListener('pointerdown',e=>e.stopPropagation());
+    editor.addEventListener('input',()=>{el.text=editor.value;});
+    editor.addEventListener('blur',()=>pushHistory());
+  }
+
+  function onElementPointerDown(e,id){
+    if(e.button!==0 || e.target.closest('textarea,input,button,.connector-dot,.resize-handle')) return;
+    e.stopPropagation();
+    const el=state.elements.find(x=>x.id===id); if(!el) return;
+    if(el.locked && state.tool==='select'){ state.selected=[id]; renderElements(); return; }
+    if(state.tool==='eraser'){ state.selected=[id]; deleteSelected(); return; }
+    if(state.tool!=='select') return;
+    if(e.shiftKey){
+      state.selected=state.selected.includes(id)?state.selected.filter(x=>x!==id):[...state.selected,id];
+    } else if(!state.selected.includes(id)) state.selected=[id];
+    const w=screenToWorld(e.clientX,e.clientY);
+    state.pointer={mode:'drag',start:w,initial:Object.fromEntries(state.selected.map(sel=>{
+      const item=state.elements.find(x=>x.id===sel); return [sel,item?{x:item.x,y:item.y,points:item.points?clone(item.points):null}:null];
+    }))};
+    renderElements();
+  }
+
+  function beginResize(e,id){
+    e.stopPropagation(); e.preventDefault();
+    if(state.tool!=='select') return;
+    const el=state.elements.find(x=>x.id===id); if(!el || el.locked) return;
+    const w=screenToWorld(e.clientX,e.clientY);
+    state.pointer={mode:'resize',id,start:w,initial:{x:el.x,y:el.y,width:el.width,height:el.height}};
+    state.resize=state.pointer;
+    state.selected=[id];
+  }
+
+  function beginConnector(e,fromId,fromSide){
+    e.stopPropagation(); e.preventDefault();
+    const a=sideAnchor(state.elements.find(x=>x.id===fromId),fromSide);
+    state.pointer={mode:'connector',fromId,fromSide,start:a,current:a};
+    renderConnectors();
+  }
+
+  function finishConnector(){
+    const d=state.pointer; if(!d||d.mode!=='connector') return;
+    const target=hitTest(d.current.x,d.current.y);
+    if(target && target.id!==d.fromId){
+      const toSide = nearestSide(target,d.current.x,d.current.y);
+      const duplicate=state.connectors.some(c=>c.fromId===d.fromId&&c.toId===target.id&&c.fromSide===d.fromSide&&c.toSide===toSide);
+      if(!duplicate){ state.connectors.push({id:uuid('conn'),fromId:d.fromId,fromSide:d.fromSide,toId:target.id,toSide}); pushHistory(); }
+    }
+    state.pointer=null; renderConnectors();
+  }
+  function nearestSide(el,x,y){
+    const b=bounds(el), ds=[
+      {side:'top',d:Math.abs(y-b.y),axis:Math.abs(x-(b.x+b.width/2))},
+      {side:'bottom',d:Math.abs(y-(b.y+b.height)),axis:Math.abs(x-(b.x+b.width/2))},
+      {side:'left',d:Math.abs(x-b.x),axis:Math.abs(y-(b.y+b.height/2))},
+      {side:'right',d:Math.abs(x-(b.x+b.width)),axis:Math.abs(y-(b.y+b.height/2))}
+    ];
+    ds.sort((a,b)=>(a.d+a.axis*.15)-(b.d+b.axis*.15)); return ds[0].side;
+  }
+
+  function onPointerDown(e){
+    if(e.button!==0) return;
+    const target=e.target;
+    if(target.closest('header,#property-bar,.tool-btn,.delete')) return;
+    if(state.tool==='pan' || e.button===1 || state.spaceDown){
+      state.pointer={mode:'pan',start:{x:e.clientX,y:e.clientY},initial:{x:state.pan.x,y:state.pan.y}};
+      viewport.classList.add('grabbing'); return;
+    }
+    const w=screenToWorld(e.clientX,e.clientY);
+    if(state.tool==='pen'){
+      state.pointer={mode:'pen'};
+      state.drawing={id:uuid('path'),type:'path',color:state.penColor,strokeWidth:state.penWidth,points:[w],x:w.x,y:w.y,width:1,height:1};
+      state.elements.push(state.drawing); state.selected=[state.drawing.id]; renderElements(); redraw(); return;
+    }
+    if(state.tool==='sticky'||state.tool==='shape'||state.tool==='text'||state.tool==='stamp'){
+      createElement(state.tool==='shape'?'shape':state.tool,w.x-(state.tool==='stamp'?27:85),w.y-(state.tool==='stamp'?27:45));
+      setTool('select'); return;
+    }
+    if(state.tool==='eraser'){
+      const hit=hitTest(w.x,w.y); if(hit){state.selected=[hit.id];deleteSelected();} return;
+    }
+    if(state.tool==='select'){
+      const hit=hitTest(w.x,w.y);
+      if(!hit){
+        state.selected=e.shiftKey?state.selected:[];
+        state.pointer={mode:'marquee',start:w,current:w,add:e.shiftKey,base:e.shiftKey?[...state.selected]:[]};
+        selectionBox.classList.remove('hidden'); renderElements();
+      }
+    }
+  }
+
+  function onPointerMove(e){
+    if(!state.pointer && !state.drawing) return;
+    const w=screenToWorld(e.clientX,e.clientY), d=state.pointer;
+    if(state.drawing){
+      state.drawing.points.push(w);
+      const b=bounds(state.drawing); Object.assign(state.drawing,b);
+      redraw(); return;
+    }
+    if(!d) return;
+    if(d.mode==='pan'){
+      state.pan.x=d.initial.x+(e.clientX-d.start.x); state.pan.y=d.initial.y+(e.clientY-d.start.y); applyTransform(); return;
+    }
+    if(d.mode==='drag'){
+      const dx=state.snap?snapValue(w.x)-snapValue(d.start.x):w.x-d.start.x,dy=state.snap?snapValue(w.y)-snapValue(d.start.y):w.y-d.start.y;
+      state.selected.forEach(id=>{
+        const el=state.elements.find(x=>x.id===id), init=d.initial[id]; if(!el||!init) return;
+        if(el.type==='frame'){
+        const label=esc(el.title||'Frame'); const lw=Math.max(90,(el.title||'Frame').length*8+28);
+        body+=`<rect x="${x}" y="${y}" width="${el.width}" height="${el.height}" rx="18" fill="none" stroke="#94a3b8" stroke-width="2"/><rect x="${x+10}" y="${y-26}" width="${lw}" height="24" rx="8" fill="${bg}" stroke="#cbd5e1"/><text x="${x+20}" y="${y-9}" fill="#64748b" font-family="Plus Jakarta Sans,sans-serif" font-size="12" font-weight="800">${label}</text>`;
+      } else if(el.type==='path'){ el.points=init.points.map(p=>({x:p.x+dx,y:p.y+dy})); Object.assign(el,bounds(el)); }
+        else {el.x=init.x+dx;el.y=init.y+dy;}
+      });
+      renderElements(); renderConnectors(); redraw(); return;
+    }
+    if(d.mode==='resize'){
+      const el=state.elements.find(x=>x.id===d.id); if(!el) return;
+      const minW=el.type==='sticky'?120:36, minH=el.type==='sticky'?90:30, maxW=el.type==='sticky'?560:1400, maxH=el.type==='sticky'?480:1000;
+      el.width=clamp(state.snap?snapValue(d.initial.width+(w.x-d.start.x)):d.initial.width+(w.x-d.start.x),minW,maxW);
+      el.height=clamp(state.snap?snapValue(d.initial.height+(w.y-d.start.y)):d.initial.height+(w.y-d.start.y),minH,maxH);
+      renderElements(); renderConnectors(); return;
+    }
+    if(d.mode==='connector'){
+      d.current=w; renderConnectors(); return;
+    }
+    if(d.mode==='marquee'){
+      d.current=w;
+      const x1=Math.min(d.start.x,w.x),y1=Math.min(d.start.y,w.y),x2=Math.max(d.start.x,w.x),y2=Math.max(d.start.y,w.y);
+      selectionBox.style.left=x1+'px'; selectionBox.style.top=y1+'px'; selectionBox.style.width=(x2-x1)+'px'; selectionBox.style.height=(y2-y1)+'px';
+      const ids=state.elements.filter(el=>pointInsideBounds(el,x1,y1,x2,y2)).map(el=>el.id);
+      state.selected=d.add?[...new Set([...d.base,...ids])]:ids; renderElements();
+    }
+  }
+
+  function onPointerUp(){
+    const d=state.pointer;
+    if(state.drawing){ state.drawing=null; pushHistory(); state.pointer=null; renderAll(); return; }
+    if(d?.mode==='drag'||d?.mode==='resize') pushHistory();
+    if(d?.mode==='resize') state.resize=null;
+    if(d?.mode==='pan') viewport.classList.remove('grabbing');
+    if(state.resize && d?.mode!=='resize') state.resize=null;
+    if(d?.mode==='marquee') selectionBox.classList.add('hidden');
+    if(d?.mode==='connector') finishConnector();
+    state.pointer=null;
+  }
+
+  function renderConnectors(){
+    const defs=`<defs><marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#64748b"/></marker></defs>`;
+    svg.innerHTML=defs;
+    for(const c of state.connectors){
+      const a=sideAnchor(state.elements.find(e=>e.id===c.fromId),c.fromSide), b=sideAnchor(state.elements.find(e=>e.id===c.toId),c.toSide);
+      if(!a||!b) continue;
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      const dx=Math.abs(b.x-a.x)*.55,dy=Math.abs(b.y-a.y)*.55;
+      const cx1=a.x+(c.fromSide==='right'?dx:c.fromSide==='left'?-dx:0);
+      const cy1=a.y+(c.fromSide==='bottom'?dy:c.fromSide==='top'?-dy:0);
+      const cx2=b.x+(c.toSide==='right'?dx:c.toSide==='left'?-dx:0);
+      const cy2=b.y+(c.toSide==='bottom'?dy:c.toSide==='top'?-dy:0);
+      p.setAttribute('d',`M ${a.x} ${a.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${b.x} ${b.y}`);
+      p.setAttribute('fill','none'); p.setAttribute('stroke','#64748b'); p.setAttribute('stroke-width','3'); p.setAttribute('marker-end','url(#arrowhead)');
+      p.setAttribute('vector-effect','non-scaling-stroke'); svg.appendChild(p);
+    }
+    const d=state.pointer;
+    if(d?.mode==='connector'){
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d',`M ${d.start.x} ${d.start.y} C ${(d.start.x+d.current.x)/2} ${d.start.y}, ${(d.start.x+d.current.x)/2} ${d.current.y}, ${d.current.x} ${d.current.y}`);
+      p.setAttribute('fill','none'); p.setAttribute('stroke','#6c5ce7'); p.setAttribute('stroke-width','3'); p.setAttribute('stroke-dasharray','7 6');
+      svg.appendChild(p);
+    }
+  }
+
+  function redraw(){
+    const r=viewport.getBoundingClientRect(), d=window.devicePixelRatio||1;
+    ctx.save(); ctx.setTransform(d,0,0,d,0,0); ctx.clearRect(0,0,r.width,r.height);
+    for(const el of state.elements){
+      if(el.type!=='path'||!el.points?.length) continue;
+      ctx.save(); ctx.strokeStyle=el.color; ctx.lineWidth=el.strokeWidth; ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.beginPath(); ctx.moveTo(el.points[0].x,el.points[0].y); for(let i=1;i<el.points.length;i++) ctx.lineTo(el.points[i].x,el.points[i].y); ctx.stroke();
+      if(state.selected.includes(el.id)){ctx.strokeStyle='#6c5ce7';ctx.lineWidth=el.strokeWidth+4;ctx.globalAlpha=.28;ctx.stroke();}
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function renderPropertyBar(){
+    let html='';
+    if(state.tool==='pen'){
+      html=`<span class="font-bold text-slate-500">Pen</span><div class="flex gap-1">${COLORS.map(c=>`<button class="w-6 h-6 rounded-full border-2 border-white shadow ${state.penColor===c?'ring-2 ring-indigo-500 scale-110':''}" style="background:${c}" data-color="${c}"></button>`).join('')}</div>
+      <div class="w-px h-5 bg-slate-300 dark:bg-slate-700"></div><span class="font-bold text-slate-500">Size</span><input id="pen-size" type="range" min="2" max="24" value="${state.penWidth}" class="accent-indigo-600 w-24">`;
+    } else if(state.tool==='sticky'){
+      html=`<span class="font-bold text-slate-500">Sticky</span><div class="flex gap-1">${STICKIES.map(s=>`<button class="w-6 h-6 rounded-md border ${state.stickyColor===s.bg?'ring-2 ring-indigo-500 scale-110':''}" style="background:${s.bg}" data-sticky="${s.bg}"></button>`).join('')}</div>`;
+    } else if(state.tool==='shape'){
+      html=`<span class="font-bold text-slate-500">Shape</span>${['rectangle','ellipse','diamond'].map(s=>`<button data-shape="${s}" class="px-2.5 py-1 rounded-lg ${state.shape===s?'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 font-bold':'hover:bg-slate-100 dark:hover:bg-slate-700'}">${s}</button>`).join('')}`;
+    } else if(state.tool==='stamp'){
+      html=`<span class="font-bold text-slate-500">Stamp</span><div class="flex gap-1">${STAMPS.map(s=>`<button data-stamp="${s}" class="text-lg px-1 ${state.stamp===s?'bg-slate-100 dark:bg-slate-700 rounded':''}">${s}</button>`).join('')}</div>`;
+    } else {
+      html=`<span class="text-slate-500 font-semibold"><i class="fa-solid fa-circle-info text-indigo-500 mr-1.5"></i>${state.tool==='select'?'Select and move objects':state.tool==='pan'?'Drag to pan around the board':state.tool==='eraser'?'Click an object to delete':state.tool==='frame'?'Click to create a frame':'Choose an object tool'}</span>`;
+    }
+    propertyControls.innerHTML=html;
+    propertyControls.querySelectorAll('[data-color]').forEach(b=>b.onclick=()=>{state.penColor=b.dataset.color;renderPropertyBar();});
+    propertyControls.querySelector('#pen-size')?.addEventListener('input',e=>state.penWidth=+e.target.value);
+    propertyControls.querySelectorAll('[data-sticky]').forEach(b=>b.onclick=()=>{state.stickyColor=b.dataset.sticky;renderPropertyBar();});
+    propertyControls.querySelectorAll('[data-shape]').forEach(b=>b.onclick=()=>{state.shape=b.dataset.shape;renderPropertyBar();});
+    propertyControls.querySelectorAll('[data-stamp]').forEach(b=>b.onclick=()=>{state.stamp=b.dataset.stamp;renderPropertyBar();});
+  }
+
+  function zoomBy(factor,cx,cy){
+    const nz=clamp(state.zoom*factor,.2,3.5);
+    if(cx!=null&&cy!=null){
+      const r=viewport.getBoundingClientRect(), mx=cx-r.left,my=cy-r.top,ratio=nz/state.zoom;
+      state.pan.x=mx-(mx-state.pan.x)*ratio; state.pan.y=my-(my-state.pan.y)*ratio;
+    }
+    state.zoom=nz; applyTransform();
+  }
+
+  function exitPresentation(){
+    if(document.body.classList.contains('present-mode')){
+      document.body.classList.remove('present-mode');
+      state.selected=[];
+      renderAll();
+      toastMsg('Back to editing');
+    }
+  }
+
+  function enterPresentation(){
+    document.body.classList.add('present-mode');
+    state.selected=[];
+    fitContent();
+    toastMsg('Presentation mode · Esc to exit');
+  }
+
+  function keydown(e){
+    if(e.key==='Escape' && document.body.classList.contains('present-mode')){e.preventDefault();closeShortcuts();state.pointer=null;state.resize=null;exitPresentation();return;}
+    if(e.key==='?' && !e.target.closest('input,textarea')){e.preventDefault();openShortcuts();return;}
+    if(e.key==='Escape'){closeShortcuts();state.pointer=null;state.resize=null;return;}
+    if(e.target.closest('input,textarea'))return;
+    if(e.code==='Space'){state.spaceDown=true;if(state.tool==='select')viewport.classList.add('cursor-pan');e.preventDefault();return;}
+    const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
+    if(mod&&k==='z'){e.preventDefault();e.shiftKey?redo():undo();return;}
+    if(mod&&k==='y'){e.preventDefault();redo();return;}
+    if(mod&&k==='d'){e.preventDefault();duplicateSelected();return;}
+    if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();deleteSelected();return;}
+    if(e.shiftKey&&e.key==='1'){e.preventDefault();fitContent();return;}
+    if(e.key==='+'||e.key==='='){zoomBy(1.15);return;} if(e.key==='-'){zoomBy(.87);return;}
+    if(state.selected.length&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){const step=e.shiftKey?10:1;moveSelected(e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0,e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0);renderAll();pushHistory();e.preventDefault();return;}
+    if(k==='v')setTool('select');else if(k==='h')setTool('pan');else if(k==='s')setTool('sticky');else if(k==='p')setTool('pen');else if(k==='r')setTool('shape');else if(k==='t')setTool('text');else if(k==='e')setTool('stamp');else if(k==='f')setTool('frame');else if(k==='x')setTool('eraser');
+  }
+  function keyup(e){ if(e.code==='Space'){state.spaceDown=false;viewport.classList.remove('cursor-pan');} }
+
+  function snapValue(v){ return state.snap ? Math.round(v/24)*24 : v; }
+  function duplicateSelected(){
+    if(!state.selected.length) return;
+    const ids=new Set(state.selected), copies=[];
+    state.elements.forEach(el=>{ if(ids.has(el.id)){ const c=clone(el); if(c.x!=null)c.x+=28; if(c.y!=null)c.y+=28; if(c.points)c.points=c.points.map(p=>({x:p.x+28,y:p.y+28})); c.id=uuid('el'); copies.push(c); }});
+    state.elements.push(...copies); state.selected=copies.map(e=>e.id); pushHistory(); renderAll(); toastMsg('Duplicated');
+  }
+  function arrangeSelected(dir){ const ids=new Set(state.selected); const chosen=state.elements.filter(e=>ids.has(e.id)); if(!chosen.length)return; state.elements=state.elements.filter(e=>!ids.has(e.id)); if(dir==='front')state.elements.push(...chosen); else state.elements.unshift(...chosen); pushHistory(); renderAll(); toastMsg(dir==='front'?'Brought to front':'Sent to back'); }
+  function toggleLock(){ if(!state.selected.length)return; state.elements.forEach(e=>{if(state.selected.includes(e.id))e.locked=!e.locked;}); pushHistory(); renderAll(); toastMsg('Lock state updated'); }
+  function fitContent(){ const items=state.elements.filter(e=>e.type!=='frame'); if(!items.length){state.zoom=1;state.pan={x:0,y:0};applyTransform();return;} let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity; items.forEach(e=>{const b=bounds(e);x1=Math.min(x1,b.x);y1=Math.min(y1,b.y);x2=Math.max(x2,b.x+b.width);y2=Math.max(y2,b.y+b.height);}); const r=viewport.getBoundingClientRect(),pad=90,zw=(r.width-pad*2)/(x2-x1||1),zh=(r.height-pad*2)/(y2-y1||1); state.zoom=clamp(Math.min(zw,zh),.2,2.4); state.pan={x:(r.width-(x2-x1)*state.zoom)/2-x1*state.zoom,y:(r.height-(y2-y1)*state.zoom)/2-y1*state.zoom}; applyTransform(); toastMsg('Board fitted'); }
+  function renderLayers(){ const list=$('#layers-list'); if(!list)return; const visible=[...state.elements].reverse(); list.innerHTML=visible.length?visible.map(el=>{const name=el.type==='sticky'?'Sticky note':el.type==='shape'?(el.text||'Shape'):el.type==='text'?(el.text||'Text'):el.type==='stamp'?'Stamp':el.type==='frame'?(el.title||'Frame'):'Drawing'; const icon=el.type==='frame'?'fa-window-maximize':el.type==='sticky'?'fa-note-sticky':el.type==='shape'?'fa-shapes':el.type==='text'?'fa-font':el.type==='stamp'?'fa-face-smile':'fa-pen-nib'; return `<button data-layer-id="${el.id}" class="panel-item w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left ${state.selected.includes(el.id)?'active':''}"><i class="fa-regular ${icon} w-4 text-center text-slate-400"></i><span class="min-w-0 flex-1 truncate text-xs font-bold">${esc(name)}</span><i class="fa-solid ${el.locked?'fa-lock':'fa-lock-open'} text-[10px] text-slate-400"></i></button>`;}).join(''):'<div class="p-4 text-xs text-slate-400">No objects yet.</div>'; list.querySelectorAll('[data-layer-id]').forEach(b=>b.onclick=()=>{state.selected=[b.dataset.layerId];renderAll();}); }
+  function renderProUI(){ $('#objects-count').textContent=`${state.elements.length} object${state.elements.length===1?'':'s'}`; $('#selected-count').textContent=`${state.selected.length} selected`; $('#snap-status').textContent=state.snap?'Snap on':'Snap off'; $('#grid-toggle').classList.toggle('bg-indigo-100',state.grid); $('#grid-toggle').classList.toggle('dark:bg-indigo-950/50',state.grid); $('#snap-toggle').classList.toggle('bg-emerald-100',state.snap); $('#snap-toggle').classList.toggle('dark:bg-emerald-950/50',state.snap); $('#selection-actions').classList.toggle('hidden',state.selected.length===0); renderLayers(); }
+  const _renderAll=renderAll; renderAll=function(){_renderAll();renderProUI();};
+  $('#layers-toggle').onclick=()=>$('#layers-panel').classList.toggle('hidden'); $('#layers-close').onclick=()=>$('#layers-panel').classList.add('hidden');
+  $('#grid-toggle').onclick=()=>{state.grid=!state.grid;viewport.classList.toggle('board-bg',state.grid);if(!state.grid)viewport.style.backgroundImage='none';else viewport.style.backgroundImage='';renderProUI();};
+  $('#snap-toggle').onclick=()=>{state.snap=!state.snap;renderProUI();};
+  $('#fit-btn').onclick=fitContent;
+  $('#present-btn').onclick=()=>{ if(document.body.classList.contains('present-mode')) exitPresentation(); else enterPresentation(); };
+  $('#present-exit').onclick=exitPresentation;
+  document.querySelectorAll('#selection-actions [data-action]').forEach(b=>b.onclick=()=>{const a=b.dataset.action;if(a==='duplicate')duplicateSelected();if(a==='lock')toggleLock();if(a==='front')arrangeSelected('front');if(a==='back')arrangeSelected('back');});
+  function renderCollab(){
+    if(!state.simCollab){cursorsLayer.innerHTML='';return;}
+    if(!state.collabs) state.collabs=[
+      {name:'Sarah',color:'#f59e0b',x:260,y:180},{name:'Alex',color:'#10b981',x:560,y:340}
+    ];
+    cursorsLayer.innerHTML='';
+    state.collabs.forEach(u=>{
+      u.x=clamp(u.x+(Math.random()-.5)*30,40,viewport.clientWidth-40);
+      u.y=clamp(u.y+(Math.random()-.5)*30,80,viewport.clientHeight-30);
+      const d=document.createElement('div'); d.className='live-cursor flex items-center gap-1'; d.style.transform=`translate(${u.x}px,${u.y}px)`;
+      d.innerHTML=`<i class="fa-solid fa-mouse-pointer text-sm" style="color:${u.color}"></i><span class="px-2 py-0.5 rounded-full text-white text-[10px] font-extrabold shadow-md" style="background:${u.color}">${u.name}</span>`;
+      cursorsLayer.appendChild(d);
+    });
+  }
+
+  function exportJSON(){
+    const data={version:2,title:titleInput.value,elements:state.elements,connectors:state.connectors};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download=(titleInput.value||'NoteFlow-workspace')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
+    toastMsg('Workspace JSON saved');
+  }
+  function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function exportPNG(){
+    const pad=80, all=state.elements.map(bounds);
+    if(!all.length){toastMsg('Nothing to export');return;}
+    let x1=Math.min(...all.map(b=>b.x)),y1=Math.min(...all.map(b=>b.y)),x2=Math.max(...all.map(b=>b.x+b.width)),y2=Math.max(...all.map(b=>b.y+b.height));
+    for(const c of state.connectors){
+      const a=sideAnchor(state.elements.find(e=>e.id===c.fromId),c.fromSide),b=sideAnchor(state.elements.find(e=>e.id===c.toId),c.toSide);
+      if(a&&b){x1=Math.min(x1,a.x,b.x);y1=Math.min(y1,a.y,b.y);x2=Math.max(x2,a.x,b.x);y2=Math.max(y2,a.y,b.y);}
+    }
+    const w=Math.ceil(x2-x1+pad*2),h=Math.ceil(y2-y1+pad*2), ox=pad-x1,oy=pad-y1;
+    const bg=document.documentElement.classList.contains('dark')?'#0f172a':'#f8fafc', grid=document.documentElement.classList.contains('dark')?'#334155':'#cbd5e1';
+    let body=`<rect width="${w}" height="${h}" fill="${bg}"/><defs><pattern id="g" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.25" fill="${grid}"/></pattern><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#64748b"/></marker></defs><rect width="${w}" height="${h}" fill="url(#g)"/>`;
+    for(const c of state.connectors){
+      const a=sideAnchor(state.elements.find(e=>e.id===c.fromId),c.fromSide),b=sideAnchor(state.elements.find(e=>e.id===c.toId),c.toSide);if(!a||!b)continue;
+      const dx=Math.abs(b.x-a.x)*.55,dy=Math.abs(b.y-a.y)*.55;
+      const cx1=a.x+(c.fromSide==='right'?dx:c.fromSide==='left'?-dx:0),cy1=a.y+(c.fromSide==='bottom'?dy:c.fromSide==='top'?-dy:0);
+      const cx2=b.x+(c.toSide==='right'?dx:c.toSide==='left'?-dx:0),cy2=b.y+(c.toSide==='bottom'?dy:c.toSide==='top'?-dy:0);
+      body+=`<path d="M${a.x+ox} ${a.y+oy} C${cx1+ox} ${cy1+oy}, ${cx2+ox} ${cy2+oy}, ${b.x+ox} ${b.y+oy}" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#a)"/>`;
+    }
+    for(const el of state.elements){
+      const b=bounds(el), x=b.x+ox,y=b.y+oy;
+      if(el.type==='path'){
+        body+=`<path d="M${el.points.map((p,i)=>(i?'L':'M')+(p.x+ox)+' '+(p.y+oy)).join(' ')}" fill="none" stroke="${el.color}" stroke-width="${el.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      } else if(el.type==='sticky'){
+        const lines=String(el.text??'').split(/\r?\n/);
+        const tspans=lines.map((line,i)=>`<tspan x="${x+16}" dy="${i===0?0:28}">${esc(line)||' '}</tspan>`).join('');
+        body+=`<rect x="${x}" y="${y}" width="${el.width}" height="${el.height}" rx="18" fill="${el.color}" stroke="#000" stroke-opacity=".10"/><text x="${x+16}" y="${y+34}" fill="#1e293b" font-family="Caveat,cursive" font-size="25">${tspans}</text>`;
+      } else if(el.type==='shape'){
+        if(el.shapeType==='ellipse') body+=`<ellipse cx="${x+el.width/2}" cy="${y+el.height/2}" rx="${el.width/2}" ry="${el.height/2}" fill="#10b981" fill-opacity=".10" stroke="#10b981" stroke-width="2"/>`;
+        else if(el.shapeType==='diamond') body+=`<g transform="rotate(45 ${x+el.width/2} ${y+el.height/2})"><rect x="${x}" y="${y}" width="${el.width}" height="${el.height}" rx="8" fill="#a855f7" fill-opacity=".10" stroke="#a855f7" stroke-width="2"/></g>`;
+        else body+=`<rect x="${x}" y="${y}" width="${el.width}" height="${el.height}" rx="18" fill="#6366f1" fill-opacity=".10" stroke="#6366f1" stroke-width="2"/>`;
+        body+=`<text x="${x+el.width/2}" y="${y+el.height/2+5}" text-anchor="middle" fill="#334155" font-family="Plus Jakarta Sans,sans-serif" font-size="14" font-weight="700">${esc(el.text)}</text>`;
+      } else if(el.type==='text'){
+        body+=`<text x="${x+6}" y="${y+22}" fill="${document.documentElement.classList.contains('dark')?'#f8fafc':'#0f172a'}" font-family="Plus Jakarta Sans,sans-serif" font-size="16" font-weight="800">${esc(el.text)}</text>`;
+      } else if(el.type==='stamp'){
+        body+=`<text x="${x+el.width/2}" y="${y+el.height*.78}" text-anchor="middle" font-size="40">${esc(el.symbol)}</text>`;
+      }
+    }
+    body+=`<text x="${w-18}" y="${h-16}" text-anchor="end" fill="${document.documentElement.classList.contains('dark')?'#64748b':'#94a3b8'}" font-family="Plus Jakarta Sans,sans-serif" font-size="11">NoteFlow</text>`;
+    const svgText=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`;
+    const blob=new Blob([svgText],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),img=new Image();
+    img.onload=()=>{const c=document.createElement('canvas');c.width=w*2;c.height=h*2;const cc=c.getContext('2d');cc.scale(2,2);cc.drawImage(img,0,0);URL.revokeObjectURL(url);const a=document.createElement('a');a.download=(titleInput.value||'NoteFlow-Board')+'.png';a.href=c.toDataURL('image/png');a.click();toastMsg('PNG exported');};
+    img.src=url;
+  }
+
+  function importJSON(file){
+    const reader=new FileReader();
+    reader.onload=()=>{try{const d=JSON.parse(reader.result);state.elements=d.elements||[];state.connectors=d.connectors||[];titleInput.value=d.title||'NoteFlow Workspace';state.selected=[];pushHistory();renderAll();toastMsg('Workspace opened');}catch{alert('That file is not a valid NoteFlow workspace JSON.');}};
+    reader.readAsText(file);
+  }
+
+  function demo(){
+    state.elements=[
+      {id:'demo-1',type:'sticky',x:180,y:150,width:190,height:160,color:'#fff3bf',text:' Note Here'},
+      {id:'demo-2',type:'shape',shapeType:'rectangle',x:480,y:175,width:165,height:95,text:'Brainstorm'},
+      {id:'demo-3',type:'shape',shapeType:'ellipse',x:770,y:165,width:170,height:105,text:'Decide'},
+
+    ];
+    state.connectors=[
+      {id:'c1',fromId:'demo-1',fromSide:'right',toId:'demo-2',toSide:'left'},
+      {id:'c2',fromId:'demo-2',fromSide:'right',toId:'demo-3',toSide:'left'}
+    ];
+    state.selected=[]; renderAll();
+  }
+
+  document.querySelectorAll('.tool-btn').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+  viewport.addEventListener('pointerdown',onPointerDown);
+  window.addEventListener('pointermove',onPointerMove);
+  window.addEventListener('pointerup',onPointerUp);
+  window.addEventListener('keydown',keydown); window.addEventListener('keyup',keyup);
+  $('#undo-btn').onclick=undo; $('#redo-btn').onclick=redo; $('#clear-btn').onclick=clearBoard;
+  $('#theme-btn').onclick=()=>{document.documentElement.classList.toggle('dark');redraw();};
+  $('#zoom-in').onclick=()=>zoomBy(1.15); $('#zoom-out').onclick=()=>zoomBy(.87); $('#zoom-reset').onclick=()=>{state.zoom=1;state.pan={x:0,y:0};applyTransform();};
+  viewport.addEventListener('wheel',e=>{e.preventDefault(); if(e.ctrlKey||e.metaKey) zoomBy(e.deltaY<0?1.08:.92,e.clientX,e.clientY); else {state.pan.x-=e.deltaX;state.pan.y-=e.deltaY;applyTransform();}}, {passive:false});
+  $('#export-btn').onclick=e=>{e.stopPropagation();$('#export-menu').classList.toggle('hidden');};
+  window.addEventListener('click',()=>$('#export-menu').classList.add('hidden'));
+  $('#png-btn').onclick=e=>{e.stopPropagation();exportPNG();$('#export-menu').classList.add('hidden');};
+  $('#json-btn').onclick=e=>{e.stopPropagation();exportJSON();$('#export-menu').classList.add('hidden');};
+  $('#import-file').onchange=e=>{const f=e.target.files?.[0];if(f)importJSON(f);e.target.value='';};
+  $('#collab-btn').onclick=()=>{state.simCollab=!state.simCollab;$('#collab-btn').classList.toggle('ring-2',state.simCollab);$('#collab-btn').classList.toggle('ring-indigo-500',state.simCollab);};
+  titleInput.addEventListener('change',pushHistory);
+  titleInput.addEventListener('keydown',e=>e.stopPropagation());
+
+  $('#shortcuts-btn').onclick=openShortcuts; $('#shortcuts-close').onclick=closeShortcuts; $('#shortcut-overlay').addEventListener('click',e=>{if(e.target.id==='shortcut-overlay')closeShortcuts();}); initFigJamTooltips();
+  setInterval(renderCollab,120);
+  demo(); resizeCanvas(); setTool('select'); pushHistory(); applyTransform();
+})();
+</script>
+</body>
+</html>

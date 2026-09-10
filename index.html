@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Note Flow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fff;color:#111827}
+    .logo{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:#6c5ce7;color:#fff;font-weight:800;letter-spacing:-.04em}
+    .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:10px;background:#6c5ce7;color:#fff;font-size:14px;font-weight:700;transition:.2s}
+    .btn:hover{background:#6c5ce7;transform:translateY(-1px)}
+  </style>
+</head>
+<body>
+  <header class="border-b border-gray-100">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
+      <div class="flex items-center gap-3">
+        <div class="logo">NF</div>
+        <span class="text-lg font-extrabold tracking-tight">Note Flow</span>
+      </div>
+      <a href="noteflow.html" class="btn">Start free</a>
+    </div>
+  </header>
+
+  <main id="start" class="min-h-[calc(100vh-80px)]">
+    <section class="mx-auto flex max-w-5xl flex-col items-center px-6 py-28 text-center">
+      <div class="mb-5 text-sm font-semibold text-gray-500">A simple space for ideas</div>
+      <h1 class="max-w-3xl text-5xl font-extrabold tracking-[-0.045em] text-gray-900 sm:text-6xl">Think. Note. Flow.</h1>
+      <p class="mt-6 max-w-xl text-base leading-7 text-gray-500 sm:text-lg">Capture ideas, organize your thoughts, and create clearly.</p>
+      <a href="noteflow.html" class="btn mt-8 px-6 py-3">Start free</a>
+    </section>
+  </main>
+
+  <footer class="border-t border-gray-100">
+    <div class="mx-auto max-w-5xl px-6 py-6 text-center text-xs text-gray-400">© 2026 Note Flow</div>
+  </footer>
+</body>
+</html>
